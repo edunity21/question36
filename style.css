@@ -274,3 +274,39 @@ ol,ul{margin:0;padding:0;list-style:none}
 @media (prefers-reduced-motion:reduce){
   *{animation:none !important;transition:none !important}
 }
+
+/* ───────── v2 추가: 전형 안내 · 평가 주안점 · 전체화면 ───────── */
+.topbar__right{display:flex;align-items:center;gap:12px;flex:none}
+.iconbtn{
+  border:1px solid var(--rule);background:var(--card);border-radius:8px;
+  padding:6px 11px;font-size:12.5px;color:var(--ink-2);white-space:nowrap;
+}
+.iconbtn:hover{border-color:var(--navy);color:var(--navy)}
+
+.exam{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:4px}
+.exam th,.exam td{border-bottom:1px solid var(--rule);padding:8px 10px;text-align:left;vertical-align:top}
+.exam tr:first-child th{
+  background:var(--navy);color:#fff;border-bottom:0;border-radius:6px 6px 0 0;
+  font-size:13px;letter-spacing:-.01em;
+}
+.exam th{width:84px;color:var(--navy);font-weight:600;white-space:nowrap}
+.exam td{color:var(--ink-2)}
+
+.focus{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+.focus li{
+  font-size:11.5px;color:var(--sage);border:1px solid var(--sage);
+  border-radius:99px;padding:2px 9px;opacity:.85;
+}
+.focus::before{
+  content:"평가 주안점";font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+  color:var(--ink-3);align-self:center;margin-right:3px;
+}
+
+body.is-full .shell{max-width:1400px}
+@media (max-width:900px){
+  .topbar__right{gap:8px}
+  .iconbtn{padding:5px 9px;font-size:12px}
+  .exam{font-size:12.5px}
+  .exam th{width:66px}
+  .focus li{font-size:11px}
+}

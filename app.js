@@ -115,14 +115,36 @@
   }
 
   /* ── 타이머 ───────────────────────────────────────── */
-  var Timer = { id: null, left: 0, total: 0 };
+  var Timer = { id: null, left: 0, total: 0, warned: false };
+
+  function chime(times) {                       /* 실제 전형의 타종을 대신하는 신호음 */
+    try {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      var ctx = new Ctx();
+      for (var i = 0; i < times; i++) {
+        var o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime + i * 0.5;
+        o.frequency.value = 880; o.connect(g); g.connect(ctx.destination);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.38);
+        o.start(t); o.stop(t + 0.4);
+      }
+    } catch (e) { /* 소리를 낼 수 없는 환경에서는 화면 표시로 대신합니다 */ }
+  }
   function timerStop() {
     if (Timer.id) { clearInterval(Timer.id); Timer.id = null; }
-    $("timerBtn").textContent = "⏱ 구상 시작";
+    $("timerBtn").textContent = labelFor();
     $("timer").hidden = true;
   }
+  function labelFor() {
+    var v = parseInt($("thinkSec").value, 10);
+    return "⏱ " + (v >= 60 ? Math.floor(v / 60) + "분" + (v % 60 ? " " + (v % 60) + "초" : "") : v + "초") + " 시작";
+  }
+
   function timerStart() {
     timerStop();
+    Timer.warned = false;
     Timer.total = Timer.left = parseInt($("thinkSec").value, 10);
     $("timer").hidden = false;
     $("timerBtn").textContent = "⏱ 중지";
@@ -130,7 +152,9 @@
     Timer.id = setInterval(function () {
       Timer.left--;
       paintTimer();
+      if (Timer.left === 30 && Timer.total > 60 && !Timer.warned) { Timer.warned = true; chime(1); }
       if (Timer.left <= 0) {
+        chime(2);
         timerStop();
         $("timer").hidden = false;
         $("timerNum").textContent = "0:00";
@@ -218,6 +242,11 @@
     if (it.fresh) $("qFresh").textContent = it.fresh;
     $("qPrompt").textContent = it.prompt;
 
+    var fc = $("qFocus"); fc.innerHTML = "";
+    (it.focus || []).forEach(function (f) {
+      var li = document.createElement("li"); li.textContent = f; fc.appendChild(li);
+    });
+
     var subs = $("qSubs"); subs.innerHTML = "";
     it.subs.forEach(function (s) {
       var li = document.createElement("li"); li.textContent = s; subs.appendChild(li);
@@ -245,7 +274,7 @@
       rib.appendChild(s);
     });
     var m = Math.floor(it.total_sec / 60), s2 = it.total_sec % 60;
-    $("totalSec").textContent = m + "분 " + (s2 ? s2 + "초" : "");
+    $("totalSec").textContent = m + "분 " + (s2 ? s2 + "초" : "") + " 기준";
 
     /* 답안 구간 */
     var segs = $("segs"); segs.innerHTML = "";
@@ -265,7 +294,7 @@
 
     $("doneBtn").className = "btn" + (isDone(it.no) ? " is-done" : "");
     $("doneBtn").textContent = isDone(it.no) ? "✓ 완료함" : "✓ 연습 완료";
-    $("qSrc").textContent = "원본 대응 문항 " + it.source;
+    $("qSrc").textContent = "원본 대응 " + it.source + "  ·  재구성 전 번호 " + it.origin + "번";
 
     renderList();
     $("detailScroll").scrollTop = 0;
@@ -335,6 +364,21 @@
   $("speakingStop").onclick = function () { TTS.stop(); };
   $("rate").onchange = function () { TTS.rate = parseFloat(this.value); };
   $("timerBtn").onclick = function () { Timer.id ? timerStop() : timerStart(); };
+  $("thinkSec").onchange = function () { if (!Timer.id) $("timerBtn").textContent = labelFor(); };
+
+  (function renderExam() {
+    var t = $("examTable"); if (!t || typeof EXAM === "undefined") return;
+    var b = t.querySelector("tbody");
+    var head = document.createElement("tr");
+    head.innerHTML = '<th colspan="2">' + EXAM.title + '</th>';
+    b.appendChild(head);
+    ([["일시", EXAM.date], ["장소", EXAM.place]].concat(EXAM.rows)).forEach(function (r) {
+      var tr = document.createElement("tr");
+      var th = document.createElement("th"); th.textContent = r[0];
+      var td = document.createElement("td"); td.textContent = r[1];
+      tr.appendChild(th); tr.appendChild(td); b.appendChild(tr);
+    });
+  })();
 
   $("doneBtn").onclick = function () {
     var no = state.cur.no;
@@ -358,11 +402,27 @@
     window.scrollTo(0, 0);
   };
 
+  function toggleFull() {
+    var d = document, el = d.documentElement;
+    if (!d.fullscreenElement && !d.webkitFullscreenElement) {
+      (el.requestFullscreen || el.webkitRequestFullscreen || function () {}).call(el);
+    } else {
+      (d.exitFullscreen || d.webkitExitFullscreen || function () {}).call(d);
+    }
+  }
+  $("fsBtn").onclick = toggleFull;
+  document.addEventListener("fullscreenchange", function () {
+    var on = !!document.fullscreenElement;
+    $("fsBtn").textContent = on ? "⛶ 전체화면 해제" : "⛶ 전체화면";
+    document.body.classList.toggle("is-full", on);
+  });
+
   document.addEventListener("keydown", function (e) {
     if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
     if (e.key === "ArrowRight") move(1);
     if (e.key === "ArrowLeft") move(-1);
     if (e.key === "Escape") TTS.stop();
+    if (e.key === "f" || e.key === "F") toggleFull();
     if (e.key === " " && state.cur) { e.preventDefault(); readQuestion(); }
   });
 
