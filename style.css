@@ -489,3 +489,34 @@ body.is-zen .src{display:none}
   body.is-zen .detail__scroll{padding-bottom:32px}
   .speaking{bottom:12px}
 }
+
+/* ============================================================
+   v5 — 연속 재생
+   ============================================================ */
+.auto{
+  display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+  margin-top:12px;padding-top:12px;border-top:1px dashed var(--rule);
+}
+.chk{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:12.5px;color:var(--ink-2);white-space:nowrap;cursor:pointer;
+}
+.chk input{width:15px;height:15px;accent-color:var(--navy);margin:0}
+.auto__now{
+  font-family:var(--mono);font-size:11.5px;color:var(--brass);
+  margin-left:auto;white-space:nowrap;
+}
+body.is-auto .auto{border-top-color:var(--brass);border-top-style:solid}
+body.is-auto .auto__now{font-weight:500}
+
+@media (max-width:900px){
+  .auto{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:10px;padding-top:10px}
+  .auto #autoBtn{grid-column:span 3;text-align:center}
+  .auto #autoScope{grid-column:span 3}
+  .auto .chk{grid-column:span 3}
+  .auto__now{grid-column:span 3;margin-left:0;text-align:right;align-self:center}
+}
+@media (max-width:400px){
+  .auto{grid-template-columns:1fr 1fr}
+  .auto #autoBtn,.auto #autoScope,.auto .chk,.auto__now{grid-column:auto}
+}

@@ -22,7 +22,7 @@
   /* ── 낭독 ─────────────────────────────────────────── */
   var TTS = {
     queue: [], idx: 0, on: false, rate: 1, voiceQ: null, voiceA: null,
-    onSeg: null, parts: null, fromSeg: 0,
+    onSeg: null, onDone: null, watch: null, parts: null, fromSeg: 0,
 
     pickVoices: function () {
       if (!window.speechSynthesis) return;
@@ -72,14 +72,15 @@
     },
 
     /* parts: [{text, who:'q'|'a', seg:index|null}] */
-    play: function (parts, onSeg) {
+    play: function (parts, onSeg, onDone) {
       if (!window.speechSynthesis) {
         alert("이 브라우저는 읽어주기를 지원하지 않습니다. 크롬이나 사파리 최신 버전을 사용해 주십시오.");
         return;
       }
-      this.stop();
+      this.stop();                       /* stop 이 onDone 을 지우므로 그 뒤에 설정합니다 */
       this.parts = parts;
       this.onSeg = onSeg || null;
+      this.onDone = onDone || null;
       var self = this;
       this.queue = [];
       parts.forEach(function (p) {
@@ -93,8 +94,14 @@
     },
 
     next: function () {
-      if (!this.on || this.idx >= this.queue.length) { this.stop(); return; }
-      var item = this.queue[this.idx], self = this;
+      if (!this.on) return;
+      if (this.idx >= this.queue.length) {          /* 자연 종료 — 완료 콜백을 넘겨 줍니다 */
+        var done = this.onDone;
+        this.stop();
+        if (done) done();
+        return;
+      }
+      var item = this.queue[this.idx], self = this, myIdx = this.idx, moved = false;
       var u = new SpeechSynthesisUtterance(item.text);
       u.lang = "ko-KR";
       u.rate = this.rate;
@@ -102,13 +109,29 @@
       var v = item.who === "q" ? this.voiceQ : this.voiceA;
       if (v) u.voice = v;
       if (this.onSeg) this.onSeg(item.seg);
-      u.onend = function () { self.idx++; setTimeout(function () { self.next(); }, item.last ? 300 : 130); };
-      u.onerror = function () { self.idx++; setTimeout(function () { self.next(); }, 130); };
+
+      function advance(delay) {
+        if (moved) return;
+        moved = true;
+        clearTimeout(self.watch);
+        self.idx = myIdx + 1;
+        setTimeout(function () { self.next(); }, delay);
+      }
+      u.onend = function () { advance(item.last ? 300 : 130); };
+      u.onerror = function () { advance(130); };
+
+      /* 안드로이드 크롬에서 낭독이 onend 없이 조용히 끊기는 경우가 있어,
+         예상 소요의 두 배가 지나면 다음 구간으로 넘깁니다. */
+      var est = (item.text.length / (5 * this.rate)) * 1000 + 4000;
+      this.watch = setTimeout(function () { if (self.on) advance(80); }, est);
+
       setTimeout(function () { if (self.on) speechSynthesis.speak(u); }, 0);
     },
 
     stop: function () {
       this.on = false;
+      this.onDone = null;
+      clearTimeout(this.watch);
       if (window.speechSynthesis) speechSynthesis.cancel();
       if (this.onSeg) this.onSeg(null);
       showSpeaking(false);
@@ -236,7 +259,9 @@
   function pad(n) { return (n < 10 ? "0" : "") + n; }
 
   /* ── 상세 ─────────────────────────────────────────── */
+  var openedByAuto = false;
   function open(it) {
+    if (!openedByAuto) autoStop();          /* 목록·이전·다음으로 직접 옮기면 연속 재생 종료 */
     TTS.stop(); timerStop();
     state.cur = it;
     document.body.classList.add("is-detail");
@@ -330,28 +355,157 @@
     });
   }
 
-  function readQuestion() {
-    var it = state.cur; if (!it) return;
+  function questionParts(it) {
     var parts = [{ text: it.prompt, who: "q", seg: null }];
     it.subs.forEach(function (s) { parts.push({ text: s, who: "q", seg: null }); });
+    return parts;
+  }
+  function answerParts(it, from) {
+    from = from || 0;
+    return it.answer.slice(from).map(function (a, i) {
+      return { text: a.text, who: "a", seg: from + i };
+    });
+  }
+  function readQuestion(onDone) {
+    var it = state.cur; if (!it) return;
     TTS.rate = parseFloat($("rate").value);
-    TTS.play(parts, markSeg);
+    TTS.play(questionParts(it), markSeg, onDone);
   }
 
-  function readAnswer(from) {
+  function readAnswer(from, onDone) {
     var it = state.cur; if (!it) return;
     showAnswer();
-    var parts = it.answer.slice(from || 0).map(function (a, i) {
-      return { text: a.text, who: "a", seg: (from || 0) + i };
-    });
     TTS.rate = parseFloat($("rate").value);
-    TTS.play(parts, markSeg);
+    TTS.play(answerParts(it, from || 0), markSeg, onDone);
   }
 
   function showAnswer() {
     $("ansBody").hidden = false;
     $("ansToggle").setAttribute("aria-expanded", "true");
   }
+
+  /* ── 연속 재생 ───────────────────────────────────── */
+  var Auto = { on: false, scope: "qa", loop: false };
+  var wakeLock = null;
+
+  function wakeOn() {                       /* 낭독 중 화면이 꺼지면 음성이 끊기므로 */
+    try {
+      if (navigator.wakeLock && !wakeLock) {
+        navigator.wakeLock.request("screen").then(function (s) {
+          wakeLock = s;
+          s.addEventListener("release", function () { wakeLock = null; });
+        }, function () { /* 지원하지 않는 브라우저는 그대로 진행합니다 */ });
+      }
+    } catch (e) { /* noop */ }
+  }
+  function wakeOff() {
+    try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch (e) { /* noop */ }
+  }
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible" && Auto.on) wakeOn();
+  });
+
+  function autoPaint() {
+    $("autoBtn").textContent = Auto.on ? "⏹ 연속 정지" : "▶ 연속 재생";
+    $("autoBtn").className = "btn" + (Auto.on ? " btn--solid" : "");
+    $("autoBtn").setAttribute("aria-pressed", Auto.on ? "true" : "false");
+    document.body.classList.toggle("is-auto", Auto.on);
+    if (!Auto.on) $("autoNow").textContent = "";
+  }
+
+  function autoLabel(it, what) {
+    var list = filtered();
+    var i = list.findIndex(function (x) { return x.no === it.no; }) + 1;
+    $("autoNow").textContent = "연속 " + i + "/" + list.length + " · " + pad(it.no) + "번 " + what;
+    $("speakingTxt").textContent = pad(it.no) + "번 " + what;
+  }
+
+  function autoStop() {
+    if (typeof Auto === "undefined" || !Auto || !Auto.on) return;
+    Auto.on = false;
+    TTS.stop();
+    wakeOff();
+    $("speakingTxt").textContent = "읽는 중";
+    autoPaint();
+  }
+
+  function autoStart() {
+    var list = filtered();
+    if (!list.length) return;
+    if (!state.cur || list.findIndex(function (x) { return x.no === state.cur.no; }) < 0) {
+      openedByAuto = true; open(list[0]); openedByAuto = false;
+    }
+    Auto.on = true;
+    Auto.scope = $("autoScope").value;
+    Auto.loop = $("autoLoop").checked;
+    saveAutoPrefs();
+    wakeOn();
+    autoPaint();
+    autoRun();
+  }
+
+  function autoRun() {
+    var it = state.cur;
+    if (!Auto.on || !it) return;
+    var doQ = Auto.scope !== "a", doA = Auto.scope !== "q";
+    if (doQ) {
+      autoLabel(it, "문항");
+      readQuestion(function () {
+        if (!Auto.on) return;
+        if (doA) autoPlayAnswer(); else autoNext();
+      });
+    } else {
+      autoPlayAnswer();
+    }
+  }
+
+  function autoPlayAnswer() {
+    var it = state.cur;
+    if (!Auto.on || !it) return;
+    autoLabel(it, "모범답안");
+    readAnswer(0, function () { if (Auto.on) autoNext(); });
+  }
+
+  function autoNext() {
+    if (!Auto.on) return;
+    var list = filtered();
+    if (!list.length) { autoStop(); return; }
+    var i = list.findIndex(function (x) { return x.no === state.cur.no; });
+    if (i < 0) i = 0;
+    var n = i + 1;
+    if (n >= list.length) {
+      if (!Auto.loop) {
+        Auto.on = false; wakeOff(); autoPaint();
+        $("autoNow").textContent = "연속 재생을 마쳤습니다 · " + list.length + "문항";
+        return;
+      }
+      n = 0;
+    }
+    openedByAuto = true; open(list[n]); openedByAuto = false;
+    setTimeout(function () { autoRun(); }, 450);
+  }
+
+  function saveAutoPrefs() {
+    try {
+      localStorage.setItem("jinro36.auto", JSON.stringify({
+        scope: $("autoScope").value, loop: $("autoLoop").checked
+      }));
+    } catch (e) { /* noop */ }
+  }
+  (function loadAutoPrefs() {
+    try {
+      var p = JSON.parse(localStorage.getItem("jinro36.auto") || "{}");
+      if (p.scope) $("autoScope").value = p.scope;
+      if (p.loop) $("autoLoop").checked = true;
+    } catch (e) { /* noop */ }
+  })();
+
+  $("autoBtn").onclick = function () { Auto.on ? autoStop() : autoStart(); };
+  $("autoScope").onchange = function () {
+    saveAutoPrefs();
+    if (Auto.on) { Auto.scope = this.value; TTS.stop(); autoRun(); }
+  };
+  $("autoLoop").onchange = function () { saveAutoPrefs(); Auto.loop = this.checked; };
 
   function move(step) {
     if (!state.cur) return;
@@ -380,8 +534,8 @@
   $("ansToggle").onclick = function () { showAnswer(); };
   $("readQ").onclick = readQuestion;
   $("readA").onclick = function () { readAnswer(0); };
-  $("stopBtn").onclick = function () { TTS.stop(); };
-  $("speakingStop").onclick = function () { TTS.stop(); };
+  $("stopBtn").onclick = function () { autoStop(); TTS.stop(); };
+  $("speakingStop").onclick = function () { autoStop(); TTS.stop(); };
   function applyVoice() {
     var sel = $("voice");
     if (!sel || !TTS.list) return;
@@ -391,12 +545,13 @@
   }
   function restartSpeech() {
     if (!TTS.on || !TTS.parts) return;
-    var parts = TTS.parts, seg = TTS.queue[TTS.idx] ? TTS.queue[TTS.idx].seg : null;
+    var parts = TTS.parts, done = TTS.onDone;
+    var seg = TTS.queue[TTS.idx] ? TTS.queue[TTS.idx].seg : null;
     var from = 0;
     if (seg !== null) {
       for (var i = 0; i < parts.length; i++) { if (parts[i].seg === seg) { from = i; break; } }
     }
-    TTS.play(parts.slice(from), TTS.onSeg);
+    TTS.play(parts.slice(from), TTS.onSeg, done);
   }
   $("rate").onchange = function () {
     TTS.rate = parseFloat(this.value);
@@ -437,7 +592,7 @@
   $("randomBtn2").onclick = rand;
   $("startBtn").onclick = function () { open(ITEMS[0]); };
   $("backBtn").onclick = function () {
-    TTS.stop(); timerStop();
+    autoStop(); TTS.stop(); timerStop();
     document.body.classList.remove("is-detail");
     window.scrollTo(0, 0);
   };
@@ -510,12 +665,12 @@
     if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
     if (e.key === "ArrowRight") move(1);
     if (e.key === "ArrowLeft") move(-1);
-    if (e.key === "Escape") { TTS.stop(); if (isZen()) { exitFull(); setZen(false); } }
+    if (e.key === "Escape") { autoStop(); TTS.stop(); if (isZen()) { exitFull(); setZen(false); } }
     if (e.key === "f" || e.key === "F") toggleFull();
     if (e.key === " " && state.cur) { e.preventDefault(); readQuestion(); }
   });
 
-  window.addEventListener("beforeunload", function () { TTS.stop(); });
+  window.addEventListener("beforeunload", function () { TTS.stop(); wakeOff(); });
 
   renderChips();
   renderList();
