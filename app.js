@@ -1,5 +1,5 @@
 /* ============================================================
-   진로전담교사 심층면접 36문항 — 동작
+   진로전담교사 심층면접 41문항 — 동작
    data.js 의 ITEMS / AREAS 를 읽어 목록·상세·낭독·타이머를 담당합니다.
    ============================================================ */
 (function () {
@@ -144,6 +144,7 @@
     if (Timer.id) { clearInterval(Timer.id); Timer.id = null; }
     $("timerBtn").textContent = labelFor();
     $("timer").hidden = true;
+    document.body.classList.remove("is-timing");
   }
   function labelFor() {
     var v = parseInt($("thinkSec").value, 10);
@@ -156,6 +157,7 @@
     Timer.total = Timer.left = parseInt($("thinkSec").value, 10);
     $("timer").hidden = false;
     $("timerBtn").textContent = "⏱ 중지";
+    document.body.classList.add("is-timing");
     paintTimer();
     Timer.id = setInterval(function () {
       Timer.left--;
@@ -165,6 +167,7 @@
         chime(2);
         timerStop();
         $("timer").hidden = false;
+        document.body.classList.add("is-timing");
         $("timerNum").textContent = "0:00";
         $("timerFill").style.width = "0%";
       }
@@ -439,26 +442,53 @@
     window.scrollTo(0, 0);
   };
 
+  /* 전체화면 API는 iOS 사파리에서 동작하지 않으므로,
+     지원되지 않는 환경에서는 CSS 기반 넓게 보기(집중 모드)로 대체합니다. */
+  var FS_OK = (function () {
+    var el = document.documentElement;
+    if (/iPad|iPhone|iPod/.test(navigator.userAgent)) return false;
+    if (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)) return false;
+    return !!(el.requestFullscreen || el.webkitRequestFullscreen);
+  })();
+
+  function isZen() { return document.body.classList.contains("is-zen"); }
+  function isFull() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+  function paintFsBtn() {
+    var on = isFull() || isZen();
+    $("fsBtn").textContent = on ? "⤡ 넓게 보기 해제" : "⛶ 넓게 보기";
+    $("fsBtn").setAttribute("aria-pressed", on ? "true" : "false");
+  }
+  function setZen(to) {
+    document.body.classList.toggle("is-zen", to);
+    $("zenExit").hidden = !to;
+    paintFsBtn();
+  }
   function toggleFull() {
     var d = document, el = d.documentElement;
-    if (!d.fullscreenElement && !d.webkitFullscreenElement) {
-      (el.requestFullscreen || el.webkitRequestFullscreen || function () {}).call(el);
+    if (!FS_OK) { setZen(!isZen()); return; }
+    if (!isFull()) {
+      var p;
+      try { p = (el.requestFullscreen || el.webkitRequestFullscreen).call(el); } catch (e) { p = null; }
+      if (p && p.catch) p.catch(function () { setZen(true); });
     } else {
       (d.exitFullscreen || d.webkitExitFullscreen || function () {}).call(d);
     }
   }
   $("fsBtn").onclick = toggleFull;
-  document.addEventListener("fullscreenchange", function () {
-    var on = !!document.fullscreenElement;
-    $("fsBtn").textContent = on ? "⛶ 전체화면 해제" : "⛶ 전체화면";
-    document.body.classList.toggle("is-full", on);
+  $("zenExit").onclick = function () { setZen(false); };
+  ["fullscreenchange", "webkitfullscreenchange"].forEach(function (ev) {
+    document.addEventListener(ev, function () {
+      document.body.classList.toggle("is-full", isFull());
+      paintFsBtn();
+    });
   });
+  paintFsBtn();
 
   document.addEventListener("keydown", function (e) {
     if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
     if (e.key === "ArrowRight") move(1);
     if (e.key === "ArrowLeft") move(-1);
-    if (e.key === "Escape") TTS.stop();
+    if (e.key === "Escape") { TTS.stop(); if (isZen()) setZen(false); }
     if (e.key === "f" || e.key === "F") toggleFull();
     if (e.key === " " && state.cur) { e.preventDefault(); readQuestion(); }
   });

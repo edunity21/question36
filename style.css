@@ -349,3 +349,142 @@ body.is-full .shell{max-width:1400px}
   .scoring{grid-template-columns:1fr;gap:8px}
   .scoring__list li,.ev__list li{font-size:12.5px}
 }
+
+/* ============================================================
+   v4 — 모바일 공간 확보
+   ① 전체화면 API가 없는 iOS에서도 동작하는 CSS 기반 "넓게 보기"
+   ② 상단바 압축 (모바일에서 세로 공간 최다 소비 구간)
+   ③ 타이머 상단 고정 · 이동 버튼 하단 고정 · 안전영역 대응
+   ============================================================ */
+
+/* ── 뷰포트 높이: dvh 지원 브라우저에서는 주소창 변동을 따라감 ── */
+@media (min-width:901px){
+  @supports (height:100dvh){
+    .list{max-height:calc(100dvh - 96px)}
+    .detail{min-height:calc(100dvh - 96px)}
+  }
+}
+
+/* ── 넓게 보기(집중 모드) — 데스크톱·모바일 공통 ── */
+body.is-zen .topbar{display:none}
+body.is-zen .shell{
+  max-width:none;grid-template-columns:1fr;
+  padding:0;gap:0;
+}
+body.is-zen .list{display:none}
+body.is-zen .detail{
+  border:0;border-radius:0;box-shadow:none;min-height:100vh;
+}
+@supports (height:100dvh){
+  body.is-zen .detail{min-height:100dvh}
+}
+body.is-zen .detail__scroll{
+  padding:calc(18px + env(safe-area-inset-top)) 20px 40px;
+  max-width:760px;margin:0 auto;
+}
+body.is-zen .src{display:none}
+.zenexit{
+  position:fixed;z-index:70;
+  top:calc(10px + env(safe-area-inset-top));right:calc(10px + env(safe-area-inset-right));
+  border:1px solid var(--rule);background:rgba(255,255,255,.92);backdrop-filter:blur(6px);
+  border-radius:99px;padding:6px 13px;font-size:12.5px;color:var(--ink-2);
+  box-shadow:var(--shadow);
+}
+.zenexit:hover{border-color:var(--navy);color:var(--navy)}
+
+/* ── 모바일 ── */
+@media (max-width:900px){
+
+  /* ① 상단바 압축 — 부제·진행 라벨을 접어 약 26px 확보 */
+  .topbar__in{padding:7px 12px;gap:9px}
+  .brand{gap:8px}
+  .brand__mark{width:30px;height:30px;border-radius:6px;font-size:12.5px}
+  .brand__txt{min-width:0}
+  .brand__txt h1{
+    font-size:14px;line-height:1.25;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .brand__txt p{display:none}
+  .progress__num{font-size:17px}
+  .progress__label{display:none}
+  .iconbtn{padding:6px 10px;font-size:12px}
+
+  /* ② 상세 좌우 여백 축소 — 읽는 폭을 최대로 */
+  .detail{border-left:0;border-right:0;border-radius:0}
+  .shell{padding:10px 0 0}
+  .detail__scroll{padding:16px 14px 96px}
+  .list{padding:0 12px}
+
+  /* ③ 도구 줄 — 균등 늘림 대신 격자로 고정 (버튼 2 / 선택 3) */
+  .tools{padding:12px 0;margin-bottom:14px}
+  .tools__row{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+  .tools__row .btn{flex:none;width:100%;text-align:center;padding:9px 8px;grid-column:span 3}
+  .tools__row .sel{flex:none;width:100%;padding:8px 6px;font-size:12.5px;grid-column:span 2}
+
+  /* ④ 타이머 — 구동 중에는 화면 상단에 고정 */
+  body.is-timing .timer{
+    position:sticky;top:45px;z-index:35;
+    margin:10px -14px 0;padding:8px 14px;
+    background:rgba(255,255,255,.95);backdrop-filter:blur(6px);
+    border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+  }
+  body.is-zen.is-timing .timer{top:0}
+
+  /* ⑤ 이동 버튼 — 하단 고정, 홈 인디케이터 영역 회피 */
+  .pager{
+    position:fixed;left:0;right:0;bottom:0;z-index:50;
+    gap:0;padding:7px 10px calc(7px + env(safe-area-inset-bottom));
+    background:rgba(255,255,255,.95);backdrop-filter:blur(8px);
+    border-top:1px solid var(--rule);
+  }
+  .pager .btn{border-radius:0;border-left-width:0;padding:10px 6px}
+  .pager .btn:first-child{border-radius:8px 0 0 8px;border-left-width:1px}
+  .pager .btn:last-child{border-radius:0 8px 8px 0}
+
+  /* ⑥ 읽는 중 표시 — 하단 고정 버튼 위로 */
+  .speaking{bottom:calc(60px + env(safe-area-inset-bottom));font-size:12.5px}
+
+  /* ⑦ 접기·펴기 버튼 터치 영역 확대 */
+  .hint__toggle,.answer__toggle{padding:12px 14px;font-size:14px}
+  .seg{padding-left:13px}
+}
+
+/* ── 넓게 보기 + 모바일 조합 보정 ── */
+@media (max-width:900px){
+  body.is-zen .detail__scroll{
+    padding:calc(14px + env(safe-area-inset-top)) 16px 96px;
+    max-width:none;
+  }
+  /* 상단 고정 타이머와 겹치지 않도록 해제 버튼을 하단으로 */
+  body.is-zen .zenexit{
+    top:auto;bottom:calc(62px + env(safe-area-inset-bottom));
+    right:calc(12px + env(safe-area-inset-right));
+  }
+}
+
+/* ── 아주 좁은 화면 (≤400px): 전형 안내 표를 세로로 풀어 씀 ── */
+@media (max-width:400px){
+  .exam,.exam tbody,.exam tr,.exam th,.exam td{display:block;width:auto}
+  .exam tr{border-bottom:1px solid var(--rule);padding:7px 0}
+  .exam tr:first-child{border-bottom:0}
+  .exam th,.exam td{border:0;padding:0}
+  .exam th{width:auto;white-space:normal;font-size:11.5px;letter-spacing:.02em;margin-bottom:1px}
+  .exam tr:first-child th{padding:8px 10px;border-radius:6px}
+  .brand__txt h1{font-size:13px}
+  .tools__row{grid-template-columns:repeat(2,1fr)}
+  .tools__row .btn,.tools__row .sel{grid-column:auto}
+  .q__title{font-size:20px}
+  .seg__text{font-size:15.5px;line-height:1.82}
+}
+
+/* ── 가로 모드 낮은 화면: 상단 고정 요소를 풀어 본문을 확보 ── */
+@media (max-height:520px) and (orientation:landscape){
+  .topbar{position:static}
+  body.is-timing .timer{position:static;margin:10px 0 0;padding:0;background:none;border:0;backdrop-filter:none}
+  .pager{position:static;padding:0;background:none;border-top:0}
+  .pager .btn{border-radius:8px;border-left-width:1px}
+  .pager{gap:7px}
+  .detail__scroll{padding-bottom:32px}
+  body.is-zen .detail__scroll{padding-bottom:32px}
+  .speaking{bottom:12px}
+}
