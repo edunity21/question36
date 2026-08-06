@@ -5,7 +5,9 @@
 (function () {
   "use strict";
 
+  var BUILD = "v5";
   var $ = function (id) { return document.getElementById(id); };
+  try { console.log("진로전담교사 심층면접 · build " + BUILD + " · " + ITEMS.length + "문항"); } catch (e) {}
   var state = { grade: "all", area: "all", q: "", cur: null, done: loadDone() };
 
   /* ── 저장 ─────────────────────────────────────────── */
@@ -339,7 +341,8 @@
 
     $("doneBtn").className = "btn" + (isDone(it.no) ? " is-done" : "");
     $("doneBtn").textContent = isDone(it.no) ? "✓ 완료함" : "✓ 연습 완료";
-    $("qSrc").textContent = "원본 대응 " + it.source + "  ·  재구성 전 번호 " + it.origin + "번";
+    $("qSrc").textContent = "원본 대응 " + it.source + "  ·  재구성 전 번호 " + it.origin
+      + "번  ·  " + ITEMS.length + "문항 " + BUILD;
 
     renderList();
     $("detailScroll").scrollTop = 0;
@@ -385,6 +388,33 @@
   }
 
   /* ── 연속 재생 ───────────────────────────────────── */
+  /* index.html 이 구버전으로 캐시되어도 동작하도록, 컨트롤이 없으면 여기서 만듭니다.
+     style.css 까지 구버전인 경우를 대비해 최소 배치는 인라인으로 지정합니다. */
+  function ensureAutoBar() {
+    if ($("autoBtn")) return true;
+    var tools = document.querySelector(".tools");
+    if (!tools) return false;
+    var bar = document.createElement("div");
+    bar.className = "auto";
+    bar.setAttribute("style",
+      "display:flex;align-items:center;gap:7px;flex-wrap:wrap;" +
+      "margin-top:12px;padding-top:12px;border-top:1px dashed #D3DAE2");
+    bar.innerHTML =
+      '<button class="btn" id="autoBtn">▶ 연속 재생</button>' +
+      '<select class="sel" id="autoScope" aria-label="연속 재생 범위">' +
+        '<option value="qa" selected>문항 + 답안</option>' +
+        '<option value="a">답안만</option>' +
+        '<option value="q">문항만</option>' +
+      '</select>' +
+      '<label class="chk" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:#4E5D6B">' +
+        '<input type="checkbox" id="autoLoop" style="width:15px;height:15px;margin:0"> 끝나면 처음부터</label>' +
+      '<span class="auto__now" id="autoNow" aria-live="polite" ' +
+        'style="font-size:11.5px;color:#9C6B1E;margin-left:auto"></span>';
+    tools.appendChild(bar);
+    return true;
+  }
+  var AUTO_OK = ensureAutoBar();
+
   var Auto = { on: false, scope: "qa", loop: false };
   var wakeLock = null;
 
@@ -406,6 +436,7 @@
   });
 
   function autoPaint() {
+    if (!AUTO_OK) return;
     $("autoBtn").textContent = Auto.on ? "⏹ 연속 정지" : "▶ 연속 재생";
     $("autoBtn").className = "btn" + (Auto.on ? " btn--solid" : "");
     $("autoBtn").setAttribute("aria-pressed", Auto.on ? "true" : "false");
@@ -414,10 +445,11 @@
   }
 
   function autoLabel(it, what) {
+    if (!AUTO_OK) return;
     var list = filtered();
     var i = list.findIndex(function (x) { return x.no === it.no; }) + 1;
     $("autoNow").textContent = "연속 " + i + "/" + list.length + " · " + pad(it.no) + "번 " + what;
-    $("speakingTxt").textContent = pad(it.no) + "번 " + what;
+    if ($("speakingTxt")) $("speakingTxt").textContent = pad(it.no) + "번 " + what;
   }
 
   function autoStop() {
@@ -425,11 +457,12 @@
     Auto.on = false;
     TTS.stop();
     wakeOff();
-    $("speakingTxt").textContent = "읽는 중";
+    if ($("speakingTxt")) $("speakingTxt").textContent = "읽는 중";
     autoPaint();
   }
 
   function autoStart() {
+    if (!AUTO_OK) return;
     var list = filtered();
     if (!list.length) return;
     if (!state.cur || list.findIndex(function (x) { return x.no === state.cur.no; }) < 0) {
@@ -476,7 +509,7 @@
     if (n >= list.length) {
       if (!Auto.loop) {
         Auto.on = false; wakeOff(); autoPaint();
-        $("autoNow").textContent = "연속 재생을 마쳤습니다 · " + list.length + "문항";
+        if ($("autoNow")) $("autoNow").textContent = "연속 재생을 마쳤습니다 · " + list.length + "문항";
         return;
       }
       n = 0;
@@ -486,6 +519,7 @@
   }
 
   function saveAutoPrefs() {
+    if (!AUTO_OK) return;
     try {
       localStorage.setItem("jinro36.auto", JSON.stringify({
         scope: $("autoScope").value, loop: $("autoLoop").checked
@@ -493,6 +527,7 @@
     } catch (e) { /* noop */ }
   }
   (function loadAutoPrefs() {
+    if (!AUTO_OK) return;
     try {
       var p = JSON.parse(localStorage.getItem("jinro36.auto") || "{}");
       if (p.scope) $("autoScope").value = p.scope;
@@ -500,12 +535,14 @@
     } catch (e) { /* noop */ }
   })();
 
-  $("autoBtn").onclick = function () { Auto.on ? autoStop() : autoStart(); };
-  $("autoScope").onchange = function () {
-    saveAutoPrefs();
-    if (Auto.on) { Auto.scope = this.value; TTS.stop(); autoRun(); }
-  };
-  $("autoLoop").onchange = function () { saveAutoPrefs(); Auto.loop = this.checked; };
+  if (AUTO_OK) {
+    $("autoBtn").onclick = function () { Auto.on ? autoStop() : autoStart(); };
+    $("autoScope").onchange = function () {
+      saveAutoPrefs();
+      if (Auto.on) { Auto.scope = this.value; TTS.stop(); autoRun(); }
+    };
+    $("autoLoop").onchange = function () { saveAutoPrefs(); Auto.loop = this.checked; };
+  }
 
   function move(step) {
     if (!state.cur) return;
