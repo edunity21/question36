@@ -453,42 +453,64 @@
 
   function isZen() { return document.body.classList.contains("is-zen"); }
   function isFull() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
-  function paintFsBtn() {
+  function isNarrow() { return window.matchMedia("(max-width:900px)").matches; }
+
+  /* 브라우저 UI를 숨기는 것(fullscreen)과 페이지 레이아웃을 접는 것(zen)은 별개입니다.
+     좁은 화면에서는 둘을 함께 켭니다. 데스크톱은 기존 동작(목록 유지)을 유지합니다. */
+  function syncWide() {
     var on = isFull() || isZen();
+    document.body.classList.toggle("is-full", isFull());
+    $("zenExit").hidden = !isZen();
     $("fsBtn").textContent = on ? "⤡ 넓게 보기 해제" : "⛶ 넓게 보기";
     $("fsBtn").setAttribute("aria-pressed", on ? "true" : "false");
   }
   function setZen(to) {
     document.body.classList.toggle("is-zen", to);
-    $("zenExit").hidden = !to;
-    paintFsBtn();
+    syncWide();
+  }
+  function exitFull() {
+    if (isFull()) (document.exitFullscreen || document.webkitExitFullscreen || function () {}).call(document);
   }
   function toggleFull() {
-    var d = document, el = d.documentElement;
-    if (!FS_OK) { setZen(!isZen()); return; }
-    if (!isFull()) {
+    var el = document.documentElement;
+    if (isFull() || isZen()) { exitFull(); setZen(false); return; }
+    /* 좁은 화면에서는 브라우저 UI만 숨겨도 체감이 없으므로 레이아웃을 함께 접습니다. */
+    if (isNarrow() || !FS_OK) setZen(true);
+    if (FS_OK) {
       var p;
       try { p = (el.requestFullscreen || el.webkitRequestFullscreen).call(el); } catch (e) { p = null; }
       if (p && p.catch) p.catch(function () { setZen(true); });
-    } else {
-      (d.exitFullscreen || d.webkitExitFullscreen || function () {}).call(d);
     }
   }
   $("fsBtn").onclick = toggleFull;
-  $("zenExit").onclick = function () { setZen(false); };
+  $("zenExit").onclick = function () { exitFull(); setZen(false); };
   ["fullscreenchange", "webkitfullscreenchange"].forEach(function (ev) {
     document.addEventListener(ev, function () {
-      document.body.classList.toggle("is-full", isFull());
-      paintFsBtn();
+      /* 안드로이드 뒤로가기 등으로 전체화면이 풀리면 레이아웃도 함께 되돌립니다. */
+      if (!isFull() && isNarrow()) document.body.classList.remove("is-zen");
+      syncWide();
     });
   });
-  paintFsBtn();
+  syncWide();
+
+  /* 상단바 실제 높이를 CSS 변수로 — 안드로이드 글자 크기 확대 설정에서도
+     고정 타이머가 상단바에 가려지지 않게 합니다. */
+  var topbarEl = document.querySelector(".topbar");
+  function measureTopbar() {
+    var h = topbarEl ? Math.round(topbarEl.getBoundingClientRect().height) : 44;
+    if (h === 0 && !isZen()) return;   /* 일시적으로 감춰진 순간의 0 은 무시 */
+    document.documentElement.style.setProperty("--topbar-h", h + "px");
+  }
+  measureTopbar();
+  window.addEventListener("resize", measureTopbar);
+  window.addEventListener("orientationchange", measureTopbar);
+  if (window.ResizeObserver && topbarEl) new ResizeObserver(measureTopbar).observe(topbarEl);
 
   document.addEventListener("keydown", function (e) {
     if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
     if (e.key === "ArrowRight") move(1);
     if (e.key === "ArrowLeft") move(-1);
-    if (e.key === "Escape") { TTS.stop(); if (isZen()) setZen(false); }
+    if (e.key === "Escape") { TTS.stop(); if (isZen()) { exitFull(); setZen(false); } }
     if (e.key === "f" || e.key === "F") toggleFull();
     if (e.key === " " && state.cur) { e.preventDefault(); readQuestion(); }
   });

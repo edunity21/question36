@@ -22,6 +22,7 @@
   --serif:"Gowun Batang", serif;
   --sans:"Pretendard", system-ui, -apple-system, sans-serif;
   --mono:"IBM Plex Mono", ui-monospace, monospace;
+  --topbar-h:44px;
 }
 
 *{box-sizing:border-box}
@@ -302,7 +303,7 @@ ol,ul{margin:0;padding:0;list-style:none}
   color:var(--ink-3);align-self:center;margin-right:3px;
 }
 
-body.is-full .shell{max-width:1400px}
+@media (min-width:901px){ body.is-full .shell{max-width:1400px} }
 @media (max-width:900px){
   .topbar__right{gap:8px}
   .iconbtn{padding:5px 9px;font-size:12px}
@@ -423,7 +424,7 @@ body.is-zen .src{display:none}
 
   /* ④ 타이머 — 구동 중에는 화면 상단에 고정 */
   body.is-timing .timer{
-    position:sticky;top:45px;z-index:35;
+    position:sticky;top:calc(var(--topbar-h) + 1px);z-index:35;
     margin:10px -14px 0;padding:8px 14px;
     background:rgba(255,255,255,.95);backdrop-filter:blur(6px);
     border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
