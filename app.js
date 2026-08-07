@@ -1,11 +1,11 @@
 /* ============================================================
-   진로전담교사 심층면접 41문항 — 동작
+   진로전담교사 심층면접 61문항 — 동작
    data.js 의 ITEMS / AREAS 를 읽어 목록·상세·낭독·타이머를 담당합니다.
    ============================================================ */
 (function () {
   "use strict";
 
-  var BUILD = "v5";
+  var BUILD = "v8";
   var $ = function (id) { return document.getElementById(id); };
   try { console.log("진로전담교사 심층면접 · build " + BUILD + " · " + ITEMS.length + "문항"); } catch (e) {}
   var state = { grade: "all", area: "all", q: "", cur: null, done: loadDone() };
